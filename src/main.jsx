@@ -1,7 +1,7 @@
 // src/main.jsx - verifique a importação
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App' // ← ESTA É A LINHA PROBLEMÁTICA
+import App from './App.jsx' // ← ESTA É A LINHA PROBLEMÁTICA
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
