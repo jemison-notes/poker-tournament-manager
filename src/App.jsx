@@ -13,62 +13,11 @@ import { Play, Pause, RotateCcw, Users, Trophy, Plus, Trash2, Clock, FileText, S
   NÃO execute fórmulas vindas de fontes não confiáveis em produção.
 */
 
-// --------- Types ---------
-type Player = {
-  id: number;
-  name: string;
-  actions: number; // buy-ins + rebuys (não inclui addon)
-  rebuys: number;
-  addons: number;
-  chips: number;
-  position: number | null;
-  prize: number;
-  active: boolean;
-  hasTimeChip: boolean; // recebeu time chip
-  hasExtraChip: boolean; // comprou extra chip
-};
+// Removido type definitions - usando comentários JSDoc ou objetos JS
 
-type BlindLevel = { 
-  level: number; 
-  smallBlind: number; 
-  bigBlind: number; 
-  ante: number;
-  isBreak?: boolean; // intervalo
-  breakDuration?: number; // duração do intervalo em minutos
-};
-
-
-
-type Tournament = {
-  id: string;
-  name: string;
-  players: Player[];
-  blinds: BlindLevel[];
-  levelDuration: number; // minutes
-  currentLevelIndex: number;
-  timeLeft: number; // seconds
-  isRunning: boolean;
-  stageWeight: number; // peso da etapa para o ranking
-  // Configurações financeiras e de fichas
-  buyInValue: number;
-  buyInChips: number;
-  rebuyValue: number;
-  rebuyChips: number;
-  addonValue: number;
-  addonChips: number;
-  adminFeePercent: number; // taxa de administração em %
-  // Time Chip e Extra Chip
-  timeChipEnabled: boolean;
-  timeChipValue: number; // fichas adicionadas se inscrever nos 2 primeiros níveis
-  extraChipEnabled: boolean;
-  extraChipValue: number; // valor em R$
-  extraChipAmount: number; // quantidade de fichas
-};
-
-// --------- Utils ---------
 const uid = (prefix = '') => `${prefix}${Date.now()}${Math.floor(Math.random() * 9999)}`;
 
-const defaultBlindStructure: BlindLevel[] = [
+const defaultBlindStructure = [
   { level: 1, smallBlind: 25, bigBlind: 50, ante: 0 },
   { level: 2, smallBlind: 50, bigBlind: 100, ante: 0 },
   { level: 3, smallBlind: 75, bigBlind: 150, ante: 25, isBreak: true, breakDuration: 10 },
@@ -78,24 +27,24 @@ const defaultBlindStructure: BlindLevel[] = [
 
 const saveKey = 'poker_tournaments_v1';
 
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // --------- Context to share tournaments ---------
-const TournamentsContext = createContext<any>(null);
+const TournamentsContext = createContext(null);
 
 const useTournaments = () => useContext(TournamentsContext);
 
 // --------- Provider ---------
-const TournamentsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+const TournamentsProvider = ({ children }) => {
+  const [tournaments, setTournaments] = useState([]);
+  const [activeTournamentId, setActiveTournamentId] = useState(null);
 
   // load
   useEffect(() => {
     try {
       const raw = localStorage.getItem(saveKey);
       if (raw) {
-        const parsed = JSON.parse(raw) as Tournament[];
+        const parsed = JSON.parse(raw);
         setTournaments(parsed);
         if (parsed.length) setActiveTournamentId(parsed[0].id);
       }
@@ -110,7 +59,7 @@ const TournamentsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [tournaments]);
 
   const createTournament = (name = 'Novo Torneio') => {
-    const t: Tournament = {
+    const t = {
       id: uid('tr_'),
       name,
       players: [],
@@ -137,11 +86,11 @@ const TournamentsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveTournamentId(t.id);
   };
 
-  const updateTournament = (id: string, patch: Partial<Tournament>) => {
+  const updateTournament = (id, patch) => {
     setTournaments((s) => s.map(t => t.id === id ? { ...t, ...patch } : t));
   };
 
-  const removeTournament = (id: string) => {
+  const removeTournament = (id) => {
     setTournaments((s) => s.filter(t => t.id !== id));
     setActiveTournamentId((cur) => (cur === id ? (tournaments[0]?.id ?? null) : cur));
   };
@@ -154,7 +103,7 @@ const TournamentsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 // --------- Formula evaluator (local only) ---------
-function calculateRanking(actions: number, position: number, stageWeight: number): number {
+function calculateRanking(actions, position, stageWeight) {
   // Fórmula: (((total de ações / posição) * 100) ^ 0.5) * peso da etapa
   if (position <= 0 || actions <= 0) return 0;
   return Math.pow(((actions / position) * 100), 0.5) * stageWeight;
@@ -162,7 +111,7 @@ function calculateRanking(actions: number, position: number, stageWeight: number
 
 // --------- Components ---------
 
-const TopBar: React.FC<{ title?: string; onCreate?: () => void }> = ({ title, onCreate }) => {
+const TopBar = ({ title, onCreate }) => {
   const { createTournament } = useTournaments();
   return (
     <div className="flex items-center justify-between mb-4">
@@ -180,7 +129,7 @@ const TopBar: React.FC<{ title?: string; onCreate?: () => void }> = ({ title, on
 };
 
 // Tournament List (left column)
-const TournamentList: React.FC = () => {
+const TournamentList = () => {
   const { tournaments, activeTournamentId, setActiveTournamentId, removeTournament } = useTournaments();
   return (
     <div className="w-72 bg-gray-900 p-4 rounded-lg">
@@ -201,12 +150,12 @@ const TournamentList: React.FC = () => {
 };
 
 // TV Screen (Modo A) — Relógio grande, nível, blinds, prize pool e contagem de fichas
-const TVScreen: React.FC<{ tournament: Tournament; update: (patch: Partial<Tournament>) => void }> = ({ tournament, update }) => {
+const TVScreen = ({ tournament, update }) => {
   const [tick, setTick] = useState(0);
 
   // Timer effect
   useEffect(() => {
-    let interval: any;
+    let interval;
     if (tournament.isRunning && tournament.timeLeft > 0) {
       interval = setInterval(() => {
         update({ timeLeft: tournament.timeLeft - 1 });
@@ -218,12 +167,11 @@ const TVScreen: React.FC<{ tournament: Tournament; update: (patch: Partial<Tourn
       update({ currentLevelIndex: next, timeLeft: tournament.levelDuration * 60, isRunning: next === tournament.blinds.length - 1 ? false : tournament.isRunning });
     }
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament.isRunning, tournament.timeLeft, tournament.currentLevelIndex]);
 
   const currentLevel = tournament.blinds[tournament.currentLevelIndex] ?? { level: 0, smallBlind: 0, bigBlind: 0, ante: 0, isBreak: false };
 
-  const formatTime = (seconds: number) => {
+  const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
@@ -333,7 +281,7 @@ const TVScreen: React.FC<{ tournament: Tournament; update: (patch: Partial<Tourn
 };
 
 // Admin Panel: editar jogadores, blinds, fórmulas, exportar
-const AdminPanel: React.FC<{ tournament: Tournament; save: (patch: Partial<Tournament>) => void }> = ({ tournament, save }) => {
+const AdminPanel = ({ tournament, save }) => {
   const [newPlayerName, setNewPlayerName] = useState('');
 
   useEffect(() => { setNewPlayerName(''); }, [tournament.id]);
@@ -345,7 +293,7 @@ const AdminPanel: React.FC<{ tournament: Tournament; save: (patch: Partial<Tourn
     const isTimeChipEligible = tournament.timeChipEnabled && tournament.currentLevelIndex < 2;
     const timeChipBonus = isTimeChipEligible ? tournament.timeChipValue : 0;
     
-    const p: Player = { 
+    const p = { 
       id: Date.now(), 
       name: newPlayerName.trim(), 
       actions: 1, // começa com 1 buy-in
@@ -362,11 +310,11 @@ const AdminPanel: React.FC<{ tournament: Tournament; save: (patch: Partial<Tourn
     setNewPlayerName('');
   };
 
-  const updatePlayer = (id: number, patch: Partial<Player>) => {
+  const updatePlayer = (id, patch) => {
     save({ players: tournament.players.map(p => p.id === id ? { ...p, ...patch } : p) });
   };
 
-  const removePlayer = (id: number) => {
+  const removePlayer = (id) => {
     save({ players: tournament.players.filter(p => p.id !== id) });
   };
 
@@ -595,10 +543,10 @@ const AdminPanel: React.FC<{ tournament: Tournament; save: (patch: Partial<Tourn
 };
 
 // Blinds Structure Manager
-const BlindsManager: React.FC<{ tournament: Tournament; save: (patch: Partial<Tournament>) => void }> = ({ tournament, save }) => {
+const BlindsManager = ({ tournament, save }) => {
   const addBlindLevel = () => {
     const lastLevel = tournament.blinds[tournament.blinds.length - 1];
-    const newLevel: BlindLevel = {
+    const newLevel = {
       level: (lastLevel?.level || 0) + 1,
       smallBlind: (lastLevel?.smallBlind || 25) * 2,
       bigBlind: (lastLevel?.bigBlind || 50) * 2,
@@ -610,7 +558,7 @@ const BlindsManager: React.FC<{ tournament: Tournament; save: (patch: Partial<To
 
   const addBreak = () => {
     const lastLevel = tournament.blinds[tournament.blinds.length - 1];
-    const newBreak: BlindLevel = {
+    const newBreak = {
       level: (lastLevel?.level || 0) + 1,
       smallBlind: 0,
       bigBlind: 0,
@@ -621,12 +569,12 @@ const BlindsManager: React.FC<{ tournament: Tournament; save: (patch: Partial<To
     save({ blinds: [...tournament.blinds, newBreak] });
   };
 
-  const updateBlind = (index: number, patch: Partial<BlindLevel>) => {
+  const updateBlind = (index, patch) => {
     const updated = tournament.blinds.map((b, i) => i === index ? { ...b, ...patch } : b);
     save({ blinds: updated });
   };
 
-  const removeBlind = (index: number) => {
+  const removeBlind = (index) => {
     save({ blinds: tournament.blinds.filter((_, i) => i !== index) });
   };
 
@@ -725,7 +673,8 @@ const BlindsManager: React.FC<{ tournament: Tournament; save: (patch: Partial<To
     </div>
   );
 };
-const RankingViewer: React.FC<{ tournament: Tournament }> = ({ tournament }) => {
+
+const RankingViewer = ({ tournament }) => {
   const withScores = tournament.players.map(p => {
     const position = p.position ?? (p.active ? tournament.players.length : tournament.players.length);
     const score = calculateRanking(p.actions, position, tournament.stageWeight);
@@ -764,15 +713,15 @@ const RankingViewer: React.FC<{ tournament: Tournament }> = ({ tournament }) => 
 };
 
 // Main App
-const PokerTournamentManagerApp: React.FC = () => {
+const PokerTournamentManagerApp = () => {
   const { tournaments, activeTournamentId, setTournaments, updateTournament } = useTournaments();
-  const [activeTab, setActiveTab] = useState<'tv' | 'admin' | 'blinds' | 'ranking'>('tv');
+  const [activeTab, setActiveTab] = useState('tv');
 
   const active = tournaments.find(t => t.id === activeTournamentId);
 
-  const save = (patch: Partial<Tournament>) => {
+  const save = (patch) => {
     if (!active) return;
-    const updated = { ...active, ...patch } as Tournament;
+    const updated = { ...active, ...patch };
     setTournaments(ts => ts.map(t => t.id === active.id ? updated : t));
   };
 
@@ -814,7 +763,7 @@ const PokerTournamentManagerApp: React.FC = () => {
 };
 
 // --------- Exported Root that wraps provider ---------
-const Root: React.FC = () => (
+const Root = () => (
   <TournamentsProvider>
     <PokerTournamentManagerApp />
   </TournamentsProvider>
