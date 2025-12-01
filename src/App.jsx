@@ -18,11 +18,11 @@ import { Play, Pause, RotateCcw, Users, Trophy, Plus, Trash2, Clock, FileText, S
 const uid = (prefix = '') => `${prefix}${Date.now()}${Math.floor(Math.random() * 9999)}`;
 
 const defaultBlindStructure = [
-  { level: 1, smallBlind: 25, bigBlind: 50, ante: 0 },
-  { level: 2, smallBlind: 50, bigBlind: 100, ante: 0 },
-  { level: 3, smallBlind: 75, bigBlind: 150, ante: 25, isBreak: true, breakDuration: 10 },
-  { level: 4, smallBlind: 100, bigBlind: 200, ante: 25 },
-  { level: 5, smallBlind: 150, bigBlind: 300, ante: 50 },
+  { level: 1, smallBlind: 25, bigBlind: 50, ante: 0, duration: 10 },
+  { level: 2, smallBlind: 50, bigBlind: 100, ante: 0, duration: 10 },
+  { level: 3, smallBlind: 75, bigBlind: 150, ante: 25, duration: 10 },
+  { level: 4, smallBlind: 100, bigBlind: 200, ante: 25, duration: 10, isBreak: true, breakDuration: 10 },
+  { level: 5, smallBlind: 150, bigBlind: 300, ante: 50, duration: 10 },
 ];
 
 const saveKey = 'poker_tournaments_v1';
@@ -153,16 +153,28 @@ const TournamentList = () => {
 const TVScreen = ({ tournament, update }) => {
   const [tick, setTick] = useState(0);
 
-  // Timer effect
-  useEffect(() => {
-    let interval;
-    if (tournament.isRunning && tournament.timeLeft > 0) {
-      interval = setInterval(() => {
-        update({ timeLeft: tournament.timeLeft - 1 });
-        setTick((t) => t + 1);
-      }, 1000);
-    } else if (tournament.isRunning && tournament.timeLeft === 0) {
-      // advance
+ // Timer effect - usar duração específica do nível
+useEffect(() => {
+  let interval;
+  if (tournament.isRunning && tournament.timeLeft > 0) {
+    interval = setInterval(() => {
+      update({ timeLeft: tournament.timeLeft - 1 });
+      setTick((t) => t + 1);
+    }, 1000);
+  } else if (tournament.isRunning && tournament.timeLeft === 0) {
+    // avança para próximo nível usando duração específica
+    const nextIndex = clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1);
+    const nextBlind = tournament.blinds[nextIndex];
+    const duration = nextBlind?.duration || (nextBlind?.isBreak ? nextBlind.breakDuration : tournament.levelDuration);
+    
+    update({ 
+      currentLevelIndex: nextIndex, 
+      timeLeft: duration * 60,
+      isRunning: nextIndex === tournament.blinds.length - 1 ? false : tournament.isRunning 
+    });
+  }
+  return () => clearInterval(interval);
+}, [tournament.isRunning, tournament.timeLeft, tournament.currentLevelIndex]);     // advance
       const next = clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1);
       update({ 
         currentLevelIndex: next, 
@@ -700,8 +712,10 @@ const AdminPanel = ({ tournament, save }) => {
   );
 };
 
-// Blinds Structure Manager
+// Blinds Structure Manager com tempo por nível
 const BlindsManager = ({ tournament, save }) => {
+  const [newLevelDuration, setNewLevelDuration] = useState(tournament.levelDuration);
+
   const addBlindLevel = () => {
     const lastLevel = tournament.blinds[tournament.blinds.length - 1];
     const newLevel = {
@@ -710,6 +724,7 @@ const BlindsManager = ({ tournament, save }) => {
       bigBlind: (lastLevel?.bigBlind || 50) * 2,
       ante: lastLevel?.ante || 0,
       isBreak: false,
+      duration: newLevelDuration, // Duração específica para este nível
     };
     save({ blinds: [...tournament.blinds, newLevel] });
   };
@@ -723,6 +738,7 @@ const BlindsManager = ({ tournament, save }) => {
       ante: 0,
       isBreak: true,
       breakDuration: 10,
+      duration: 10, // Duração do intervalo (não conta como nível)
     };
     save({ blinds: [...tournament.blinds, newBreak] });
   };
@@ -736,135 +752,285 @@ const BlindsManager = ({ tournament, save }) => {
     save({ blinds: tournament.blinds.filter((_, i) => i !== index) });
   };
 
+  const moveBlindUp = (index) => {
+    if (index === 0) return;
+    const newBlinds = [...tournament.blinds];
+    [newBlinds[index], newBlinds[index - 1]] = [newBlinds[index - 1], newBlinds[index]];
+    // Recalcular números dos níveis
+    newBlinds.forEach((blind, idx) => {
+      blind.level = idx + 1;
+    });
+    save({ blinds: newBlinds });
+  };
+
+  const moveBlindDown = (index) => {
+    if (index === tournament.blinds.length - 1) return;
+    const newBlinds = [...tournament.blinds];
+    [newBlinds[index], newBlinds[index + 1]] = [newBlinds[index + 1], newBlinds[index]];
+    // Recalcular números dos níveis
+    newBlinds.forEach((blind, idx) => {
+      blind.level = idx + 1;
+    });
+    save({ blinds: newBlinds });
+  };
+
+  // Atualizar duração de todos os níveis
+  const updateAllDurations = () => {
+    const updated = tournament.blinds.map(blind => ({
+      ...blind,
+      duration: blind.isBreak ? (blind.breakDuration || 10) : newLevelDuration
+    }));
+    save({ blinds: updated, levelDuration: newLevelDuration });
+  };
+
+  // Calcular tempo total
+  const calculateTotalTime = () => {
+    return tournament.blinds.reduce((total, blind) => {
+      return total + (blind.duration || (blind.isBreak ? blind.breakDuration : tournament.levelDuration));
+    }, 0);
+  };
+
+  // Calcular tempo até o intervalo
+  const calculateTimeToBreak = () => {
+    let total = 0;
+    for (const blind of tournament.blinds) {
+      if (blind.isBreak) break;
+      total += blind.duration || tournament.levelDuration;
+    }
+    return total;
+  };
+
   return (
-    <div className="bg-gray-800 p-4 rounded-lg space-y-4">
+    <div className="bg-gray-800 p-6 rounded-lg space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-white">Estrutura de Blinds</h3>
-        <div className="flex gap-2">
-          <button onClick={addBlindLevel} className="px-3 py-2 bg-green-600 rounded text-white text-sm">
-            + Adicionar Nível
-          </button>
-          <button onClick={addBreak} className="px-3 py-2 bg-orange-600 rounded text-white text-sm">
-            + Adicionar Intervalo
-          </button>
+        <h3 className="text-2xl font-bold text-white">Estrutura de Blinds</h3>
+        <div className="flex items-center gap-4">
+          <div className="text-gray-300">
+            <span className="font-semibold">Tempo Total:</span> {calculateTotalTime()} min
+            {calculateTimeToBreak() > 0 && (
+              <span className="ml-4 text-orange-300">
+                <span className="font-semibold">Até 1º Intervalo:</span> {calculateTimeToBreak()} min
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="space-y-2 max-h-[600px] overflow-auto">
+      {/* Configuração de duração padrão */}
+      <div className="bg-gray-900 p-4 rounded-lg">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-gray-300 font-semibold">Duração Padrão dos Níveis</div>
+            <div className="text-sm text-gray-400">(aplica-se a todos os níveis de blinds)</div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="w-24 p-2 rounded bg-black text-white"
+                value={newLevelDuration}
+                onChange={(e) => setNewLevelDuration(Math.max(1, Number(e.target.value) || 1))}
+                min="1"
+              />
+              <span className="text-gray-300">minutos</span>
+            </div>
+            <button
+              onClick={updateAllDurations}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+            >
+              Aplicar a Todos
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Botões de ação */}
+      <div className="flex gap-4">
+        <button 
+          onClick={addBlindLevel} 
+          className="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg text-white font-semibold flex items-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Adicionar Nível
+        </button>
+        
+        <button 
+          onClick={addBreak} 
+          className="px-6 py-3 bg-orange-600 hover:bg-orange-700 rounded-lg text-white font-semibold flex items-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Adicionar Intervalo
+        </button>
+      </div>
+
+      {/* Lista de níveis */}
+      <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
         {tournament.blinds.map((blind, index) => (
-          <div key={index} className={`p-3 rounded ${blind.isBreak ? 'bg-orange-900' : 'bg-gray-900'}`}>
-            {blind.isBreak ? (
-              <div className="flex items-center gap-4">
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Nível</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 rounded bg-black text-white"
-                      value={blind.level}
-                      onChange={(e) => updateBlind(index, { level: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Duração do Intervalo (min)</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 rounded bg-black text-white"
-                      value={blind.breakDuration || 10}
-                      onChange={(e) => updateBlind(index, { breakDuration: Number(e.target.value) })}
-                    />
-                  </div>
+          <div key={index} className={`p-4 rounded-lg ${blind.isBreak ? 'bg-orange-900' : 'bg-gray-900'}`}>
+            <div className="flex items-center gap-4">
+              {/* Ícone e número do nível */}
+              <div className="flex flex-col items-center">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${blind.isBreak ? 'bg-orange-700' : 'bg-blue-700'}`}>
+                  <span className="font-bold">{blind.level}</span>
                 </div>
-                <div className="text-orange-300 font-bold text-sm">INTERVALO</div>
-                <button onClick={() => removeBlind(index)} className="px-3 py-2 bg-red-600 rounded text-white">
+                <div className="text-xs text-gray-400 mt-1">
+                  {blind.isBreak ? 'Intervalo' : 'Nível'}
+                </div>
+              </div>
+
+              {/* Conteúdo do nível */}
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4">
+                {blind.isBreak ? (
+                  <>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Descrição</label>
+                      <div className="text-lg font-semibold text-orange-300">INTERVALO</div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Duração (min)</label>
+                      <input
+                        type="number"
+                        className="w-full p-2 rounded bg-black text-white"
+                        value={blind.breakDuration || 10}
+                        onChange={(e) => updateBlind(index, { 
+                          breakDuration: Math.max(1, Number(e.target.value) || 10),
+                          duration: Math.max(1, Number(e.target.value) || 10)
+                        })}
+                        min="1"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs text-gray-400 mb-1">Informações</label>
+                      <div className="text-sm text-gray-300">
+                        As fichas não aumentam durante o intervalo
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Small Blind</label>
+                      <input
+                        type="number"
+                        className="w-full p-2 rounded bg-black text-white"
+                        value={blind.smallBlind}
+                        onChange={(e) => updateBlind(index, { smallBlind: Number(e.target.value) || 0 })}
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Big Blind</label>
+                      <input
+                        type="number"
+                        className="w-full p-2 rounded bg-black text-white"
+                        value={blind.bigBlind}
+                        onChange={(e) => updateBlind(index, { bigBlind: Number(e.target.value) || 0 })}
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Ante</label>
+                      <input
+                        type="number"
+                        className="w-full p-2 rounded bg-black text-white"
+                        value={blind.ante}
+                        onChange={(e) => updateBlind(index, { ante: Number(e.target.value) || 0 })}
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Duração (min)</label>
+                      <input
+                        type="number"
+                        className="w-full p-2 rounded bg-black text-white"
+                        value={blind.duration || tournament.levelDuration}
+                        onChange={(e) => updateBlind(index, { 
+                          duration: Math.max(1, Number(e.target.value) || tournament.levelDuration) 
+                        })}
+                        min="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Total Blinds</label>
+                      <div className="text-lg font-semibold">
+                        {blind.smallBlind}/{blind.bigBlind}
+                        {blind.ante > 0 && ` +${blind.ante}`}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Controles */}
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => moveBlindUp(index)}
+                    disabled={index === 0}
+                    className={`px-3 py-1 rounded ${index === 0 ? 'bg-gray-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => moveBlindDown(index)}
+                    disabled={index === tournament.blinds.length - 1}
+                    className={`px-3 py-1 rounded ${index === tournament.blinds.length - 1 ? 'bg-gray-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                    ↓
+                  </button>
+                </div>
+                <button
+                  onClick={() => removeBlind(index)}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white"
+                >
                   Remover
                 </button>
               </div>
-            ) : (
-              <div className="flex items-center gap-4">
-                <div className="flex-1 grid grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Nível</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 rounded bg-black text-white"
-                      value={blind.level}
-                      onChange={(e) => updateBlind(index, { level: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Small Blind</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 rounded bg-black text-white"
-                      value={blind.smallBlind}
-                      onChange={(e) => updateBlind(index, { smallBlind: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Big Blind</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 rounded bg-black text-white"
-                      value={blind.bigBlind}
-                      onChange={(e) => updateBlind(index, { bigBlind: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Ante</label>
-                    <input
-                      type="number"
-                      className="w-full p-2 rounded bg-black text-white"
-                      value={blind.ante}
-                      onChange={(e) => updateBlind(index, { ante: Number(e.target.value) })}
-                    />
-                  </div>
-                </div>
-                <button onClick={() => removeBlind(index)} className="px-3 py-2 bg-red-600 rounded text-white">
-                  Remover
-                </button>
+            </div>
+
+            {/* Duração específica indicada */}
+            {!blind.isBreak && blind.duration !== tournament.levelDuration && (
+              <div className="mt-2 text-sm text-green-400">
+                ⚠️ Duração personalizada: {blind.duration} min (padrão: {tournament.levelDuration} min)
               </div>
             )}
           </div>
         ))}
       </div>
-    </div>
-  );
-};
 
-const RankingViewer = ({ tournament }) => {
-  const withScores = tournament.players.map(p => {
-    const position = p.position ?? (p.active ? tournament.players.length : tournament.players.length);
-    const score = calculateRanking(p.actions, position, tournament.stageWeight);
-    return { ...p, score, finalPosition: position };
-  }).sort((a,b) => b.score - a.score);
-
-  return (
-    <div className="bg-gray-800 p-4 rounded-lg">
-      <div className="text-white font-semibold mb-3 text-xl">
-        Ranking - Fórmula: (((ações ÷ posição) × 100) ^ 0.5) × peso da etapa
-      </div>
-      <div className="text-sm text-gray-400 mb-4">
-        Peso da etapa atual: {tournament.stageWeight}
-      </div>
-      <div className="space-y-2">
-        {withScores.map((p, i) => (
-          <div key={p.id} className={`p-3 rounded flex items-center justify-between ${i===0? 'bg-yellow-500 text-black': i===1? 'bg-gray-600 text-white' : i===2? 'bg-orange-700 text-white' : 'bg-gray-900 text-white'}`}>
-            <div className="flex gap-4 items-center">
-              <div className="font-bold text-lg w-8">{i + 1}º</div>
-              <div>
-                <div className="font-medium">{p.name}</div>
-                <div className="text-sm opacity-75">
-                  Posição no torneio: {p.finalPosition}º • Ações: {p.actions}
-                </div>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="font-bold text-xl">{p.score.toFixed(2)}</div>
-              <div className="text-xs opacity-75">pontos</div>
-            </div>
+      {/* Resumo */}
+      <div className="bg-gray-900 p-4 rounded-lg">
+        <div className="text-gray-300 font-semibold mb-2">Resumo da Estrutura</div>
+        <div className="grid grid-cols-3 gap-4 text-sm">
+          <div>
+            <span className="text-gray-400">Total de Níveis:</span>
+            <span className="ml-2 font-semibold">
+              {tournament.blinds.filter(b => !b.isBreak).length}
+            </span>
           </div>
-        ))}
+          <div>
+            <span className="text-gray-400">Intervalos:</span>
+            <span className="ml-2 font-semibold text-orange-300">
+              {tournament.blinds.filter(b => b.isBreak).length}
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-400">Tempo Total:</span>
+            <span className="ml-2 font-semibold">{calculateTotalTime()} minutos</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Dicas */}
+      <div className="bg-black p-4 rounded-lg">
+        <div className="text-gray-300 text-sm">
+          <strong>Dica:</strong> Os intervalos não contam como níveis. Eles são pausas onde o tempo para 
+          mas as blinds não aumentam. Use setas ↑↓ para reordenar os níveis.
+        </div>
       </div>
     </div>
   );
