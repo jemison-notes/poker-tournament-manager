@@ -1,19 +1,13 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Play, Pause, RotateCcw, Users, Trophy, Plus, Trash2, Clock, FileText, Settings } from 'lucide-react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Play, Pause, RotateCcw, Trophy, Plus, Trash2, Clock, FileText, Settings } from 'lucide-react';
 
 /*
-  PokerTournamentManager.tsx
-  - Tela TV (modo A) com relógio, nível, blinds, prize pool e contagem de fichas
-  - Painel administrativo completo para gerenciar torneios, jogadores, blinds e fórmulas de ranking
-  - Suporte a múltiplos torneios (lista) — abrir um torneio para gerenciar
-  - Suporte a múltiplas fórmulas de ranking (salvas com nome); o organizador escolhe uma para aplicar
-  - Persistência em localStorage
-
-  Observações de segurança: para avaliar fórmulas, usa-se `new Function(...)` localmente.
-  NÃO execute fórmulas vindas de fontes não confiáveis em produção.
+  PokerTournamentManager.jsx
+  - Tela TV em janela separada
+  - Painel administrativo completo
+  - Estrutura de blinds com tempo por nível
+  - Intervalos não contam como níveis
 */
-
-// Removido type definitions - usando comentários JSDoc ou objetos JS
 
 const uid = (prefix = '') => `${prefix}${Date.now()}${Math.floor(Math.random() * 9999)}`;
 
@@ -29,7 +23,7 @@ const saveKey = 'poker_tournaments_v1';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// --------- Context to share tournaments ---------
+// --------- Context ---------
 const TournamentsContext = createContext(null);
 
 const useTournaments = () => useContext(TournamentsContext);
@@ -39,7 +33,6 @@ const TournamentsProvider = ({ children }) => {
   const [tournaments, setTournaments] = useState([]);
   const [activeTournamentId, setActiveTournamentId] = useState(null);
 
-  // load
   useEffect(() => {
     try {
       const raw = localStorage.getItem(saveKey);
@@ -53,7 +46,6 @@ const TournamentsProvider = ({ children }) => {
     }
   }, []);
 
-  // save
   useEffect(() => {
     localStorage.setItem(saveKey, JSON.stringify(tournaments));
   }, [tournaments]);
@@ -63,7 +55,7 @@ const TournamentsProvider = ({ children }) => {
       id: uid('tr_'),
       name,
       players: [],
-      blinds: defaultBlindStructure,
+      blinds: [...defaultBlindStructure],
       levelDuration: 10,
       currentLevelIndex: 0,
       timeLeft: 10 * 60,
@@ -96,15 +88,22 @@ const TournamentsProvider = ({ children }) => {
   };
 
   return (
-    <TournamentsContext.Provider value={{ tournaments, setTournaments, activeTournamentId, setActiveTournamentId, createTournament, updateTournament, removeTournament }}>
+    <TournamentsContext.Provider value={{ 
+      tournaments, 
+      setTournaments, 
+      activeTournamentId, 
+      setActiveTournamentId, 
+      createTournament, 
+      updateTournament, 
+      removeTournament 
+    }}>
       {children}
     </TournamentsContext.Provider>
   );
 };
 
-// --------- Formula evaluator (local only) ---------
+// --------- Formula ---------
 function calculateRanking(actions, position, stageWeight) {
-  // Fórmula: (((total de ações / posição) * 100) ^ 0.5) * peso da etapa
   if (position <= 0 || actions <= 0) return 0;
   return Math.pow(((actions / position) * 100), 0.5) * stageWeight;
 }
@@ -120,7 +119,10 @@ const TopBar = ({ title, onCreate }) => {
         {title || 'Gerenciador de Torneios'}
       </h1>
       <div className="flex gap-2">
-        <button className="px-4 py-2 bg-blue-600 rounded text-white flex items-center gap-2" onClick={() => createTournament('Torneio ' + new Date().toLocaleString())}>
+        <button 
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white flex items-center gap-2" 
+          onClick={() => createTournament('Torneio ' + new Date().toLocaleString())}
+        >
           <Plus size={16} /> Novo Torneio
         </button>
       </div>
@@ -128,7 +130,6 @@ const TopBar = ({ title, onCreate }) => {
   );
 };
 
-// Tournament List (left column)
 const TournamentList = () => {
   const { tournaments, activeTournamentId, setActiveTournamentId, removeTournament } = useTournaments();
   return (
@@ -136,56 +137,60 @@ const TournamentList = () => {
       <div className="text-gray-300 font-semibold mb-2">Torneios</div>
       <div className="space-y-2 max-h-80 overflow-auto">
         {tournaments.map(t => (
-          <div key={t.id} className={`p-3 rounded-md cursor-pointer flex items-center justify-between ${t.id === activeTournamentId ? 'bg-green-700' : 'bg-gray-800'}`} onClick={() => setActiveTournamentId(t.id)}>
-            <div className="text-white font-medium">{t.name}</div>
+          <div 
+            key={t.id} 
+            className={`p-3 rounded-md cursor-pointer flex items-center justify-between ${t.id === activeTournamentId ? 'bg-green-700' : 'bg-gray-800'}`} 
+            onClick={() => setActiveTournamentId(t.id)}
+          >
+            <div className="text-white font-medium truncate">{t.name}</div>
             <div className="flex gap-2">
-              <button onClick={(e) => { e.stopPropagation(); removeTournament(t.id); }} className="p-1 rounded bg-red-600 text-white"><Trash2 size={14} /></button>
+              <button 
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  removeTournament(t.id); 
+                }} 
+                className="p-1 rounded bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
           </div>
         ))}
-        {tournaments.length === 0 && <div className="text-gray-500">Nenhum torneio. Crie um novo.</div>}
+        {tournaments.length === 0 && (
+          <div className="text-gray-500 text-center py-4">Nenhum torneio. Crie um novo.</div>
+        )}
       </div>
     </div>
   );
 };
 
-// TV Screen (Modo A) — Relógio, nível, blinds para admin (com controles)
+// TV Screen (Modo Admin)
 const TVScreen = ({ tournament, update }) => {
   const [tick, setTick] = useState(0);
 
- // Timer effect - usar duração específica do nível
-useEffect(() => {
-  let interval;
-  if (tournament.isRunning && tournament.timeLeft > 0) {
-    interval = setInterval(() => {
-      update({ timeLeft: tournament.timeLeft - 1 });
-      setTick((t) => t + 1);
-    }, 1000);
-  } else if (tournament.isRunning && tournament.timeLeft === 0) {
-    // avança para próximo nível usando duração específica
-    const nextIndex = clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1);
-    const nextBlind = tournament.blinds[nextIndex];
-    const duration = nextBlind?.duration || (nextBlind?.isBreak ? nextBlind.breakDuration : tournament.levelDuration);
-    
-    update({ 
-      currentLevelIndex: nextIndex, 
-      timeLeft: duration * 60,
-      isRunning: nextIndex === tournament.blinds.length - 1 ? false : tournament.isRunning 
-    });
-  }
-  return () => clearInterval(interval);
-}, [tournament.isRunning, tournament.timeLeft, tournament.currentLevelIndex]);     // advance
-      const next = clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1);
+  // Timer effect com duração específica por nível
+  useEffect(() => {
+    let interval;
+    if (tournament.isRunning && tournament.timeLeft > 0) {
+      interval = setInterval(() => {
+        update({ timeLeft: tournament.timeLeft - 1 });
+        setTick((t) => t + 1);
+      }, 1000);
+    } else if (tournament.isRunning && tournament.timeLeft === 0) {
+      const nextIndex = clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1);
+      const nextBlind = tournament.blinds[nextIndex];
+      const duration = nextBlind?.duration || (nextBlind?.isBreak ? nextBlind.breakDuration : tournament.levelDuration);
+      
       update({ 
-        currentLevelIndex: next, 
-        timeLeft: tournament.levelDuration * 60, 
-        isRunning: next === tournament.blinds.length - 1 ? false : tournament.isRunning 
+        currentLevelIndex: nextIndex, 
+        timeLeft: duration * 60,
+        isRunning: nextIndex === tournament.blinds.length - 1 ? false : tournament.isRunning 
       });
     }
     return () => clearInterval(interval);
-  }, [tournament.isRunning, tournament.timeLeft, tournament.currentLevelIndex]);
+  }, [tournament.isRunning, tournament.timeLeft, tournament.currentLevelIndex, tournament.blinds, tournament.levelDuration, update]);
 
-  const currentLevel = tournament.blinds[tournament.currentLevelIndex] ?? { 
+  const currentLevel = tournament.blinds[tournament.currentLevelIndex] || { 
     level: 0, 
     smallBlind: 0, 
     bigBlind: 0, 
@@ -212,7 +217,6 @@ useEffect(() => {
   const openTVWindow = () => {
     const tvWindow = window.open('/tv', 'tv-screen', 'width=1200,height=800,menubar=no,toolbar=no,location=no');
     if (tvWindow) {
-      // Salva o torneio atual no localStorage para a TV acessar
       localStorage.setItem('current_tv_tournament', JSON.stringify(tournament));
       localStorage.setItem('current_tv_tournament_id', tournament.id);
     }
@@ -255,7 +259,7 @@ useEffect(() => {
         
         {currentLevel.isBreak && (
           <div className="text-lg text-orange-300 mb-2">
-            Pausa de {currentLevel.breakDuration} minutos
+            Pausa de {currentLevel.breakDuration || 10} minutos
           </div>
         )}
 
@@ -270,7 +274,7 @@ useEffect(() => {
           </div>
           <div className="text-center">
             <div className="text-sm text-gray-400">Nível Duração</div>
-            <div className="text-2xl font-bold">{tournament.levelDuration} min</div>
+            <div className="text-2xl font-bold">{currentLevel.duration || tournament.levelDuration} min</div>
           </div>
         </div>
 
@@ -294,7 +298,7 @@ useEffect(() => {
           <button 
             onClick={() => update({ 
               currentLevelIndex: clamp(tournament.currentLevelIndex - 1, 0, tournament.blinds.length - 1), 
-              timeLeft: tournament.levelDuration * 60 
+              timeLeft: (tournament.blinds[tournament.currentLevelIndex - 1]?.duration || tournament.levelDuration) * 60 
             })} 
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg"
           >
@@ -304,7 +308,7 @@ useEffect(() => {
           <button 
             onClick={() => update({ 
               currentLevelIndex: clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1), 
-              timeLeft: tournament.levelDuration * 60 
+              timeLeft: (tournament.blinds[tournament.currentLevelIndex + 1]?.duration || tournament.levelDuration) * 60 
             })} 
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg"
           >
@@ -323,150 +327,25 @@ useEffect(() => {
     </div>
   );
 };
-  // Timer effect
-  useEffect(() => {
-    let interval;
-    if (tournament.isRunning && tournament.timeLeft > 0) {
-      interval = setInterval(() => {
-        update({ timeLeft: tournament.timeLeft - 1 });
-        setTick((t) => t + 1);
-      }, 1000);
-    } else if (tournament.isRunning && tournament.timeLeft === 0) {
-      // advance
-      const next = clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1);
-      update({ currentLevelIndex: next, timeLeft: tournament.levelDuration * 60, isRunning: next === tournament.blinds.length - 1 ? false : tournament.isRunning });
-    }
-    return () => clearInterval(interval);
-  }, [tournament.isRunning, tournament.timeLeft, tournament.currentLevelIndex]);
 
-  const currentLevel = tournament.blinds[tournament.currentLevelIndex] ?? { level: 0, smallBlind: 0, bigBlind: 0, ante: 0, isBreak: false };
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const totalPrizePool = tournament.players.reduce((s, p) => {
-    const actionsTotal = p.actions * tournament.buyInValue;
-    const addonsTotal = p.addons * tournament.addonValue;
-    const extraChipTotal = p.hasExtraChip ? tournament.extraChipValue : 0;
-    const total = actionsTotal + addonsTotal + extraChipTotal;
-    const afterFee = total * (1 - tournament.adminFeePercent / 100);
-    return s + afterFee;
-  }, 0);
-
-  if (currentLevel.isBreak) {
-    return (
-      <div className="bg-black rounded-lg p-8 text-center text-white shadow-lg">
-        <div className="text-7xl font-mono font-extrabold text-orange-400 mb-4">{formatTime(tournament.timeLeft)}</div>
-        <div className="text-4xl mb-4 text-orange-300">⏸️ INTERVALO</div>
-        <div className="text-xl text-gray-300 mb-2">Nível {currentLevel.level} - Pausa de {currentLevel.breakDuration} minutos</div>
-        <div className="flex justify-center gap-6 my-4">
-          <div>
-            <div className="text-sm text-gray-400">Prize Pool</div>
-            <div className="text-2xl font-bold">R$ {totalPrizePool.toFixed(2)}</div>
-          </div>
-          <div>
-            <div className="text-sm text-gray-400">Jogadores Ativos</div>
-            <div className="text-2xl font-bold">{tournament.players.filter(p => p.active).length}</div>
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="flex gap-3 justify-center mt-6">
-          <button onClick={() => update({ isRunning: !tournament.isRunning })} className={`px-6 py-3 rounded font-bold flex items-center gap-2 ${tournament.isRunning ? 'bg-red-600' : 'bg-green-600'}`}>
-            {tournament.isRunning ? <Pause size={18} /> : <Play size={18} />} {tournament.isRunning ? 'Pausar' : 'Iniciar'}
-          </button>
-          <button onClick={() => update({ isRunning: false, currentLevelIndex: 0, timeLeft: tournament.levelDuration * 60 })} className="px-6 py-3 bg-gray-700 rounded flex items-center gap-2"> <RotateCcw size={18} /> Reiniciar</button>
-          <button onClick={() => update({ currentLevelIndex: clamp(tournament.currentLevelIndex - 1, 0, tournament.blinds.length - 1), timeLeft: tournament.levelDuration * 60 })} className="px-4 py-2 bg-blue-600 rounded">←</button>
-          <button onClick={() => update({ currentLevelIndex: clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1), timeLeft: tournament.levelDuration * 60 })} className="px-4 py-2 bg-blue-600 rounded">→</button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-black rounded-lg p-8 text-center text-white shadow-lg">
-      <div className="text-7xl font-mono font-extrabold text-green-400 mb-4">{formatTime(tournament.timeLeft)}</div>
-      <div className="text-2xl mb-1">Nível {currentLevel.level}</div>
-      <div className="text-lg text-gray-300 mb-2">Blinds: {currentLevel.smallBlind}/{currentLevel.bigBlind} {currentLevel.ante > 0 ? `• Ante: ${currentLevel.ante}` : ''}</div>
-      <div className="flex justify-center gap-6 my-4">
-        <div>
-          <div className="text-sm text-gray-400">Prize Pool</div>
-          <div className="text-2xl font-bold">R$ {totalPrizePool.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-sm text-gray-400">Jogadores Ativos</div>
-          <div className="text-2xl font-bold">{tournament.players.filter(p => p.active).length}</div>
-        </div>
-        <div>
-          <div className="text-sm text-gray-400">Nível Duração</div>
-          <div className="text-2xl font-bold">{tournament.levelDuration} min</div>
-        </div>
-      </div>
-
-      {/* Top prizes (first 3) */}
-      <div className="mt-6 grid grid-cols-3 gap-4">
-        {[1,2,3].map((pos) => {
-          const pl = tournament.players.find(p => p.position === pos);
-          return (
-            <div key={pos} className="bg-gray-900 p-4 rounded-lg">
-              <div className="text-sm text-gray-400">{pos}º Lugar</div>
-              <div className="font-semibold text-lg mt-1">{pl ? pl.name : '-'}</div>
-              <div className="text-sm text-gray-400">Prêmio: {pl ? `R$ ${pl.prize.toFixed(2)}` : '-'}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Chips: show top 6 stacks */}
-      <div className="mt-6 bg-gray-900 p-4 rounded-lg">
-        <div className="text-left text-gray-300 font-semibold mb-2">Maior Pilha (Top 6)</div>
-        <div className="grid grid-cols-2 gap-2">
-          {tournament.players
-            .slice()
-            .sort((a,b) => b.chips - a.chips)
-            .slice(0,6)
-            .map(p => (
-              <div key={p.id} className="flex justify-between items-center p-2 bg-black rounded">
-                <div className="text-sm text-gray-200">{p.name}</div>
-                <div className="text-sm font-bold">{p.chips}</div>
-              </div>
-            ))}
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div className="flex gap-3 justify-center mt-6">
-        <button onClick={() => update({ isRunning: !tournament.isRunning })} className={`px-6 py-3 rounded font-bold flex items-center gap-2 ${tournament.isRunning ? 'bg-red-600' : 'bg-green-600'}`}>
-          {tournament.isRunning ? <Pause size={18} /> : <Play size={18} />} {tournament.isRunning ? 'Pausar' : 'Iniciar'}
-        </button>
-        <button onClick={() => update({ isRunning: false, currentLevelIndex: 0, timeLeft: tournament.levelDuration * 60 })} className="px-6 py-3 bg-gray-700 rounded flex items-center gap-2"> <RotateCcw size={18} /> Reiniciar</button>
-        <button onClick={() => update({ currentLevelIndex: clamp(tournament.currentLevelIndex - 1, 0, tournament.blinds.length - 1), timeLeft: tournament.levelDuration * 60 })} className="px-4 py-2 bg-blue-600 rounded">←</button>
-        <button onClick={() => update({ currentLevelIndex: clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1), timeLeft: tournament.levelDuration * 60 })} className="px-4 py-2 bg-blue-600 rounded">→</button>
-      </div>
-    </div>
-  );
-};
-
-// Admin Panel: editar jogadores, blinds, fórmulas, exportar
+// Admin Panel
 const AdminPanel = ({ tournament, save }) => {
   const [newPlayerName, setNewPlayerName] = useState('');
 
-  useEffect(() => { setNewPlayerName(''); }, [tournament.id]);
+  useEffect(() => { 
+    setNewPlayerName(''); 
+  }, [tournament.id]);
 
   const addPlayer = () => {
     if (!newPlayerName.trim()) return;
     
-    // Verifica se é time chip (níveis 1 ou 2)
     const isTimeChipEligible = tournament.timeChipEnabled && tournament.currentLevelIndex < 2;
     const timeChipBonus = isTimeChipEligible ? tournament.timeChipValue : 0;
     
     const p = { 
       id: Date.now(), 
       name: newPlayerName.trim(), 
-      actions: 1, // começa com 1 buy-in
+      actions: 1,
       rebuys: 0, 
       addons: 0,
       chips: tournament.buyInChips + timeChipBonus, 
@@ -522,41 +401,99 @@ const AdminPanel = ({ tournament, save }) => {
         <div className="text-gray-300 font-semibold mb-3">Configurações do Torneio</div>
         <div className="grid grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Duração do nível (min)</label>
-            <input type="number" className="w-full p-2 rounded bg-black text-white" value={tournament.levelDuration} onChange={(e)=> save({ levelDuration: clamp(Number(e.target.value)||1,1,180), timeLeft: clamp(Number(e.target.value)||1,1,180)*60 })} />
+            <label className="block text-sm text-gray-400 mb-1">Duração padrão (min)</label>
+            <input 
+              type="number" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.levelDuration} 
+              onChange={(e)=> save({ 
+                levelDuration: clamp(Number(e.target.value)||1,1,180), 
+                timeLeft: clamp(Number(e.target.value)||1,1,180)*60 
+              })} 
+            />
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-1">Nível atual</label>
-            <input type="number" className="w-full p-2 rounded bg-black text-white" value={tournament.currentLevelIndex} onChange={(e)=> save({ currentLevelIndex: clamp(Number(e.target.value)||0,0,tournament.blinds.length-1), timeLeft: tournament.levelDuration*60 })} />
+            <input 
+              type="number" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.currentLevelIndex} 
+              onChange={(e)=> save({ 
+                currentLevelIndex: clamp(Number(e.target.value)||0,0,tournament.blinds.length-1), 
+                timeLeft: tournament.levelDuration*60 
+              })} 
+            />
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-1">Peso da Etapa</label>
-            <input type="number" step="0.1" className="w-full p-2 rounded bg-black text-white" value={tournament.stageWeight} onChange={(e)=> save({ stageWeight: Number(e.target.value) || 1 })} />
+            <input 
+              type="number" 
+              step="0.1" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.stageWeight} 
+              onChange={(e)=> save({ stageWeight: Number(e.target.value) || 1 })} 
+            />
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-1">Taxa Admin (%)</label>
-            <input type="number" step="0.1" className="w-full p-2 rounded bg-black text-white" value={tournament.adminFeePercent} onChange={(e)=> save({ adminFeePercent: Number(e.target.value) || 0 })} />
+            <input 
+              type="number" 
+              step="0.1" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.adminFeePercent} 
+              onChange={(e)=> save({ adminFeePercent: Number(e.target.value) || 0 })} 
+            />
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-gray-400 mb-1">Buy-in (R$)</label>
-            <input type="number" className="w-full p-2 rounded bg-black text-white" value={tournament.buyInValue} onChange={(e)=> save({ buyInValue: Number(e.target.value) || 0 })} />
+            <input 
+              type="number" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.buyInValue} 
+              onChange={(e)=> save({ buyInValue: Number(e.target.value) || 0 })} 
+            />
             <label className="block text-sm text-gray-400 mb-1 mt-2">Fichas do Buy-in</label>
-            <input type="number" className="w-full p-2 rounded bg-black text-white" value={tournament.buyInChips} onChange={(e)=> save({ buyInChips: Number(e.target.value) || 0 })} />
+            <input 
+              type="number" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.buyInChips} 
+              onChange={(e)=> save({ buyInChips: Number(e.target.value) || 0 })} 
+            />
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-1">Rebuy (R$)</label>
-            <input type="number" className="w-full p-2 rounded bg-black text-white" value={tournament.rebuyValue} onChange={(e)=> save({ rebuyValue: Number(e.target.value) || 0 })} />
+            <input 
+              type="number" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.rebuyValue} 
+              onChange={(e)=> save({ rebuyValue: Number(e.target.value) || 0 })} 
+            />
             <label className="block text-sm text-gray-400 mb-1 mt-2">Fichas do Rebuy</label>
-            <input type="number" className="w-full p-2 rounded bg-black text-white" value={tournament.rebuyChips} onChange={(e)=> save({ rebuyChips: Number(e.target.value) || 0 })} />
+            <input 
+              type="number" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.rebuyChips} 
+              onChange={(e)=> save({ rebuyChips: Number(e.target.value) || 0 })} 
+            />
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-1">Addon (R$)</label>
-            <input type="number" className="w-full p-2 rounded bg-black text-white" value={tournament.addonValue} onChange={(e)=> save({ addonValue: Number(e.target.value) || 0 })} />
+            <input 
+              type="number" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.addonValue} 
+              onChange={(e)=> save({ addonValue: Number(e.target.value) || 0 })} 
+            />
             <label className="block text-sm text-gray-400 mb-1 mt-2">Fichas do Addon</label>
-            <input type="number" className="w-full p-2 rounded bg-black text-white" value={tournament.addonChips} onChange={(e)=> save({ addonChips: Number(e.target.value) || 0 })} />
+            <input 
+              type="number" 
+              className="w-full p-2 rounded bg-black text-white" 
+              value={tournament.addonChips} 
+              onChange={(e)=> save({ addonChips: Number(e.target.value) || 0 })} 
+            />
           </div>
         </div>
 
@@ -617,12 +554,23 @@ const AdminPanel = ({ tournament, save }) => {
       <div className="bg-gray-900 p-4 rounded">
         <div className="text-gray-300 font-semibold mb-2">Adicionar Jogador</div>
         {tournament.timeChipEnabled && tournament.currentLevelIndex < 2 && (
-          <div className="text-sm text-green-400 mb-2">✓ Time Chip ativo - Jogador receberá +{tournament.timeChipValue} fichas</div>
+          <div className="text-sm text-green-400 mb-2">
+            ✓ Time Chip ativo - Jogador receberá +{tournament.timeChipValue} fichas
+          </div>
         )}
         <div className="flex gap-2">
-          <input className="flex-1 p-2 rounded bg-black text-white" placeholder="Nome do jogador" value={newPlayerName} onChange={(e)=>setNewPlayerName(e.target.value)} />
-          <button onClick={addPlayer} className="px-4 py-2 bg-green-600 rounded text-white">Adicionar</button>
-          <button onClick={exportCSV} className="px-4 py-2 bg-gray-700 rounded text-white">Exportar CSV</button>
+          <input 
+            className="flex-1 p-2 rounded bg-black text-white" 
+            placeholder="Nome do jogador" 
+            value={newPlayerName} 
+            onChange={(e)=>setNewPlayerName(e.target.value)} 
+          />
+          <button onClick={addPlayer} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white">
+            Adicionar
+          </button>
+          <button onClick={exportCSV} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white">
+            Exportar CSV
+          </button>
         </div>
       </div>
 
@@ -631,7 +579,9 @@ const AdminPanel = ({ tournament, save }) => {
         <div className="text-gray-300 font-semibold mb-2">Jogadores ({tournament.players.length})</div>
         <div className="space-y-2 max-h-96 overflow-auto">
           {tournament.players.map(p => {
-            const totalPaid = (p.actions * tournament.buyInValue) + (p.addons * tournament.addonValue) + (p.hasExtraChip ? tournament.extraChipValue : 0);
+            const totalPaid = (p.actions * tournament.buyInValue) + 
+                            (p.addons * tournament.addonValue) + 
+                            (p.hasExtraChip ? tournament.extraChipValue : 0);
             return (
               <div key={p.id} className="flex items-center justify-between p-3 bg-black rounded">
                 <div>
@@ -662,7 +612,7 @@ const AdminPanel = ({ tournament, save }) => {
                           hasExtraChip: true,
                           chips: p.chips + tournament.extraChipAmount 
                         })} 
-                        className="px-2 py-1 bg-purple-600 rounded text-white text-xs whitespace-nowrap"
+                        className="px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-xs whitespace-nowrap"
                       >
                         +Extra Chip
                       </button>
@@ -674,7 +624,7 @@ const AdminPanel = ({ tournament, save }) => {
                       actions: p.actions + 1,
                       chips: p.chips + tournament.rebuyChips 
                     })} 
-                    className="px-3 py-1 bg-blue-600 rounded text-white text-sm whitespace-nowrap"
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm whitespace-nowrap"
                   >
                     +Rebuy
                   </button>
@@ -683,7 +633,7 @@ const AdminPanel = ({ tournament, save }) => {
                       addons: p.addons + 1,
                       chips: p.chips + tournament.addonChips 
                     })} 
-                    className="px-3 py-1 bg-purple-600 rounded text-white text-sm whitespace-nowrap"
+                    className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm whitespace-nowrap"
                   >
                     +Addon
                   </button>
@@ -692,13 +642,13 @@ const AdminPanel = ({ tournament, save }) => {
                       active: false, 
                       position: tournament.players.filter(x=>x.active).length 
                     })} 
-                    className="px-3 py-1 bg-red-600 rounded text-white text-sm"
+                    className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm"
                   >
                     Eliminar
                   </button>
                   <button 
                     onClick={()=> removePlayer(p.id)} 
-                    className="px-2 py-1 bg-gray-600 rounded text-white text-sm"
+                    className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-white text-sm"
                   >
                     ✕
                   </button>
@@ -724,7 +674,7 @@ const BlindsManager = ({ tournament, save }) => {
       bigBlind: (lastLevel?.bigBlind || 50) * 2,
       ante: lastLevel?.ante || 0,
       isBreak: false,
-      duration: newLevelDuration, // Duração específica para este nível
+      duration: newLevelDuration,
     };
     save({ blinds: [...tournament.blinds, newLevel] });
   };
@@ -738,7 +688,7 @@ const BlindsManager = ({ tournament, save }) => {
       ante: 0,
       isBreak: true,
       breakDuration: 10,
-      duration: 10, // Duração do intervalo (não conta como nível)
+      duration: 10,
     };
     save({ blinds: [...tournament.blinds, newBreak] });
   };
@@ -756,7 +706,6 @@ const BlindsManager = ({ tournament, save }) => {
     if (index === 0) return;
     const newBlinds = [...tournament.blinds];
     [newBlinds[index], newBlinds[index - 1]] = [newBlinds[index - 1], newBlinds[index]];
-    // Recalcular números dos níveis
     newBlinds.forEach((blind, idx) => {
       blind.level = idx + 1;
     });
@@ -767,14 +716,12 @@ const BlindsManager = ({ tournament, save }) => {
     if (index === tournament.blinds.length - 1) return;
     const newBlinds = [...tournament.blinds];
     [newBlinds[index], newBlinds[index + 1]] = [newBlinds[index + 1], newBlinds[index]];
-    // Recalcular números dos níveis
     newBlinds.forEach((blind, idx) => {
       blind.level = idx + 1;
     });
     save({ blinds: newBlinds });
   };
 
-  // Atualizar duração de todos os níveis
   const updateAllDurations = () => {
     const updated = tournament.blinds.map(blind => ({
       ...blind,
@@ -783,14 +730,12 @@ const BlindsManager = ({ tournament, save }) => {
     save({ blinds: updated, levelDuration: newLevelDuration });
   };
 
-  // Calcular tempo total
   const calculateTotalTime = () => {
     return tournament.blinds.reduce((total, blind) => {
       return total + (blind.duration || (blind.isBreak ? blind.breakDuration : tournament.levelDuration));
     }, 0);
   };
 
-  // Calcular tempo até o intervalo
   const calculateTimeToBreak = () => {
     let total = 0;
     for (const blind of tournament.blinds) {
@@ -1036,9 +981,47 @@ const BlindsManager = ({ tournament, save }) => {
   );
 };
 
+const RankingViewer = ({ tournament }) => {
+  const withScores = tournament.players.map(p => {
+    const position = p.position ?? (p.active ? tournament.players.length : tournament.players.length);
+    const score = calculateRanking(p.actions, position, tournament.stageWeight);
+    return { ...p, score, finalPosition: position };
+  }).sort((a,b) => b.score - a.score);
+
+  return (
+    <div className="bg-gray-800 p-4 rounded-lg">
+      <div className="text-white font-semibold mb-3 text-xl">
+        Ranking - Fórmula: (((ações ÷ posição) × 100) ^ 0.5) × peso da etapa
+      </div>
+      <div className="text-sm text-gray-400 mb-4">
+        Peso da etapa atual: {tournament.stageWeight}
+      </div>
+      <div className="space-y-2">
+        {withScores.map((p, i) => (
+          <div key={p.id} className={`p-3 rounded flex items-center justify-between ${i===0? 'bg-yellow-500 text-black': i===1? 'bg-gray-600 text-white' : i===2? 'bg-orange-700 text-white' : 'bg-gray-900 text-white'}`}>
+            <div className="flex gap-4 items-center">
+              <div className="font-bold text-lg w-8">{i + 1}º</div>
+              <div>
+                <div className="font-medium">{p.name}</div>
+                <div className="text-sm opacity-75">
+                  Posição no torneio: {p.finalPosition}º • Ações: {p.actions}
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="font-bold text-xl">{p.score.toFixed(2)}</div>
+              <div className="text-xs opacity-75">pontos</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // Main App
 const PokerTournamentManagerApp = () => {
-  const { tournaments, activeTournamentId, setTournaments, updateTournament } = useTournaments();
+  const { tournaments, activeTournamentId, setTournaments } = useTournaments();
   const [activeTab, setActiveTab] = useState('tv');
 
   const active = tournaments.find(t => t.id === activeTournamentId);
@@ -1070,15 +1053,35 @@ const PokerTournamentManagerApp = () => {
 
         <div>
           <div className="flex gap-2 mb-4">
-            <button onClick={()=> setActiveTab('tv')} className={`px-4 py-2 rounded flex items-center gap-2 ${activeTab==='tv'? 'bg-green-600 text-white' : 'bg-gray-700 text-white'}`}> <Clock size={16}/> TV</button>
-            <button onClick={()=> setActiveTab('admin')} className={`px-4 py-2 rounded flex items-center gap-2 ${activeTab==='admin'? 'bg-green-600 text-white' : 'bg-gray-700 text-white'}`}> <Settings size={16}/> Admin</button>
-            <button onClick={()=> setActiveTab('blinds')} className={`px-4 py-2 rounded flex items-center gap-2 ${activeTab==='blinds'? 'bg-green-600 text-white' : 'bg-gray-700 text-white'}`}> <FileText size={16}/> Blinds</button>
-            <button onClick={()=> setActiveTab('ranking')} className={`px-4 py-2 rounded flex items-center gap-2 ${activeTab==='ranking'? 'bg-green-600 text-white' : 'bg-gray-700 text-white'}`}> <Trophy size={16}/> Ranking</button>
+            <button 
+              onClick={()=> setActiveTab('tv')} 
+              className={`px-4 py-2 rounded flex items-center gap-2 ${activeTab==='tv'? 'bg-green-600 text-white' : 'bg-gray-700 text-white'}`}
+            >
+              <Clock size={16}/> TV
+            </button>
+            <button 
+              onClick={()=> setActiveTab('admin')} 
+              className={`px-4 py-2 rounded flex items-center gap-2 ${activeTab==='admin'? 'bg-green-600 text-white' : 'bg-gray-700 text-white'}`}
+            >
+              <Settings size={16}/> Admin
+            </button>
+            <button 
+              onClick={()=> setActiveTab('blinds')} 
+              className={`px-4 py-2 rounded flex items-center gap-2 ${activeTab==='blinds'? 'bg-green-600 text-white' : 'bg-gray-700 text-white'}`}
+            >
+              <FileText size={16}/> Blinds
+            </button>
+            <button 
+              onClick={()=> setActiveTab('ranking')} 
+              className={`px-4 py-2 rounded flex items-center gap-2 ${activeTab==='ranking'? 'bg-green-600 text-white' : 'bg-gray-700 text-white'}`}
+            >
+              <Trophy size={16}/> Ranking
+            </button>
           </div>
 
-          {activeTab === 'tv' && <TVScreen tournament={active} update={(p)=> save(p)} />}
-          {activeTab === 'admin' && <AdminPanel tournament={active} save={(p)=> save(p)} />}
-          {activeTab === 'blinds' && <BlindsManager tournament={active} save={(p)=> save(p)} />}
+          {activeTab === 'tv' && <TVScreen tournament={active} update={save} />}
+          {activeTab === 'admin' && <AdminPanel tournament={active} save={save} />}
+          {activeTab === 'blinds' && <BlindsManager tournament={active} save={save} />}
           {activeTab === 'ranking' && <RankingViewer tournament={active} />}
         </div>
       </div>
@@ -1086,7 +1089,7 @@ const PokerTournamentManagerApp = () => {
   );
 };
 
-// --------- Exported Root that wraps provider ---------
+// --------- Exported Root ---------
 const Root = () => (
   <TournamentsProvider>
     <PokerTournamentManagerApp />
