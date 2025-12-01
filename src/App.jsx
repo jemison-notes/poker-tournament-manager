@@ -149,10 +149,168 @@ const TournamentList = () => {
   );
 };
 
-// TV Screen (Modo A) — Relógio grande, nível, blinds, prize pool e contagem de fichas
+// TV Screen (Modo A) — Relógio, nível, blinds para admin (com controles)
 const TVScreen = ({ tournament, update }) => {
   const [tick, setTick] = useState(0);
 
+  // Timer effect
+  useEffect(() => {
+    let interval;
+    if (tournament.isRunning && tournament.timeLeft > 0) {
+      interval = setInterval(() => {
+        update({ timeLeft: tournament.timeLeft - 1 });
+        setTick((t) => t + 1);
+      }, 1000);
+    } else if (tournament.isRunning && tournament.timeLeft === 0) {
+      // advance
+      const next = clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1);
+      update({ 
+        currentLevelIndex: next, 
+        timeLeft: tournament.levelDuration * 60, 
+        isRunning: next === tournament.blinds.length - 1 ? false : tournament.isRunning 
+      });
+    }
+    return () => clearInterval(interval);
+  }, [tournament.isRunning, tournament.timeLeft, tournament.currentLevelIndex]);
+
+  const currentLevel = tournament.blinds[tournament.currentLevelIndex] ?? { 
+    level: 0, 
+    smallBlind: 0, 
+    bigBlind: 0, 
+    ante: 0, 
+    isBreak: false 
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const totalPrizePool = tournament.players.reduce((s, p) => {
+    const actionsTotal = p.actions * tournament.buyInValue;
+    const addonsTotal = p.addons * tournament.addonValue;
+    const extraChipTotal = p.hasExtraChip ? tournament.extraChipValue : 0;
+    const total = actionsTotal + addonsTotal + extraChipTotal;
+    const afterFee = total * (1 - tournament.adminFeePercent / 100);
+    return s + afterFee;
+  }, 0);
+
+  // Função para abrir TV em nova janela
+  const openTVWindow = () => {
+    const tvWindow = window.open('/tv', 'tv-screen', 'width=1200,height=800,menubar=no,toolbar=no,location=no');
+    if (tvWindow) {
+      // Salva o torneio atual no localStorage para a TV acessar
+      localStorage.setItem('current_tv_tournament', JSON.stringify(tournament));
+      localStorage.setItem('current_tv_tournament_id', tournament.id);
+    }
+  };
+
+  return (
+    <div className="bg-gray-800 p-6 rounded-lg space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-2xl font-bold text-white">Tela TV (Modo Admin)</h3>
+        <button 
+          onClick={openTVWindow}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg text-white font-bold flex items-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          Abrir Tela TV (Nova Janela)
+        </button>
+      </div>
+
+      <div className="bg-black rounded-lg p-6 text-center text-white shadow-lg">
+        <div className="text-6xl font-mono font-extrabold text-green-400 mb-4">
+          {formatTime(tournament.timeLeft)}
+        </div>
+        
+        <div className="text-xl mb-2">
+          {currentLevel.isBreak ? (
+            <span className="text-orange-400">⏸️ INTERVALO • Nível {currentLevel.level}</span>
+          ) : (
+            <span>Nível {currentLevel.level}</span>
+          )}
+        </div>
+        
+        {!currentLevel.isBreak && (
+          <div className="text-lg text-gray-300 mb-2">
+            Blinds: {currentLevel.smallBlind}/{currentLevel.bigBlind} 
+            {currentLevel.ante > 0 ? ` • Ante: ${currentLevel.ante}` : ''}
+          </div>
+        )}
+        
+        {currentLevel.isBreak && (
+          <div className="text-lg text-orange-300 mb-2">
+            Pausa de {currentLevel.breakDuration} minutos
+          </div>
+        )}
+
+        <div className="flex justify-center gap-6 my-6">
+          <div className="text-center">
+            <div className="text-sm text-gray-400">Prize Pool</div>
+            <div className="text-2xl font-bold">R$ {totalPrizePool.toFixed(2)}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-sm text-gray-400">Jogadores Ativos</div>
+            <div className="text-2xl font-bold">{tournament.players.filter(p => p.active).length}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-sm text-gray-400">Nível Duração</div>
+            <div className="text-2xl font-bold">{tournament.levelDuration} min</div>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex gap-3 justify-center mt-6 flex-wrap">
+          <button 
+            onClick={() => update({ isRunning: !tournament.isRunning })} 
+            className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 ${tournament.isRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+          >
+            {tournament.isRunning ? <Pause size={18} /> : <Play size={18} />} 
+            {tournament.isRunning ? 'Pausar' : 'Iniciar'}
+          </button>
+          
+          <button 
+            onClick={() => update({ isRunning: false, currentLevelIndex: 0, timeLeft: tournament.levelDuration * 60 })} 
+            className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center gap-2"
+          >
+            <RotateCcw size={18} /> Reiniciar
+          </button>
+          
+          <button 
+            onClick={() => update({ 
+              currentLevelIndex: clamp(tournament.currentLevelIndex - 1, 0, tournament.blinds.length - 1), 
+              timeLeft: tournament.levelDuration * 60 
+            })} 
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg"
+          >
+            ← Nível Anterior
+          </button>
+          
+          <button 
+            onClick={() => update({ 
+              currentLevelIndex: clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1), 
+              timeLeft: tournament.levelDuration * 60 
+            })} 
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg"
+          >
+            Próximo Nível →
+          </button>
+        </div>
+      </div>
+
+      {/* Instruções */}
+      <div className="bg-gray-900 p-4 rounded-lg">
+        <div className="text-gray-300 text-sm">
+          <strong>Dica:</strong> Use o botão "Abrir Tela TV" para exibir o relógio em uma janela separada. 
+          Assim você pode continuar usando o painel administrativo enquanto os jogadores veem apenas o relógio.
+        </div>
+      </div>
+    </div>
+  );
+};
   // Timer effect
   useEffect(() => {
     let interval;
