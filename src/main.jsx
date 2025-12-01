@@ -1,11 +1,23 @@
-// src/main.jsx - verifique a importação
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.jsx' // ← ESTA É A LINHA PROBLEMÁTICA
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import App from './App.jsx'
+import TVRoute from './TVRoute.jsx'
 import './index.css'
+
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <App />,
+  },
+  {
+    path: '/tv',
+    element: <TVRoute />,
+  },
+])
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <RouterProvider router={router} />
   </React.StrictMode>
 )
