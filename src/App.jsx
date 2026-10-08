@@ -766,8 +766,7 @@ const BlindsManager = ({ tournament, save }) => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <div className="text-gray-300 font-semibold">Duração Padrão dos Níveis</div>
-            <div className="text-sm text-gray-400">(aplica-se a todos os níveis de blinds)</div>
-          </div>
+            </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <input
