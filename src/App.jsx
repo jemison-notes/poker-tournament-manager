@@ -1008,7 +1008,7 @@ const RankingViewer = ({ tournament }) => {
       <div>
         <h3 className="text-xl font-bold text-white">Classificação da Etapa</h3>
         <p className="text-xs text-gray-400">
-          Fórmula Oficial: $$((\text{Ações} \div \text{Posição}) \times 100)^{0.5} \times \text{Peso da Etapa}$$
+          Fórmula Oficial: ((Ações ÷ Posição) × 100)^0.5 × Peso da Etapa
         </p>
       </div>
 
