@@ -1,46 +1,36 @@
 import React, { useEffect } from 'react';
-import { soundManager } from '.poker-tournament-manager/src/soundUtils'; 
+import { soundManager } from './soundUtils.js';
 
-// Dentro do componente TVScreen:
+export default function TVScreenPublic({ tournament }) {
 useEffect(() => {
-  let interval = null;
-
-  if (tournament.isRunning && tournament.timeLeft > 0) {
-    interval = setInterval(() => {
-      const nextTime = tournament.timeLeft - 1;
-
-      // Opcional: Bip nos últimos 5 segundos (5, 4, 3, 2, 1)
-      if (nextTime > 0 && nextTime <= 5) {
-        soundManager.playTick();
-      }
-
-      update({ timeLeft: nextTime });
-    }, 1000);
-  } else if (tournament.isRunning && tournament.timeLeft === 0) {
-    // 🔔 TOCA O ALERTA QUANDO OS BLINDS SOBEM
+  if (!tournament.isRunning) return;
+  if (tournament.timeLeft > 0 && tournament.timeLeft <= 5) {
+    soundManager.playTick();
+  } else if (tournament.timeLeft === 0) {
     soundManager.playBlindLevelUp();
-
-    const nextIndex = clamp(tournament.currentLevelIndex + 1, 0, tournament.blinds.length - 1);
-    const nextBlind = tournament.blinds[nextIndex];
-    const duration =
-      nextBlind?.duration ||
-      (nextBlind?.isBreak ? nextBlind.breakDuration : null) ||
-      tournament.levelDuration ||
-      10;
-
-    update({
-      currentLevelIndex: nextIndex,
-      timeLeft: duration * 60,
-      isRunning: nextIndex < tournament.blinds.length - 1,
-    });
   }
-
-  return () => clearInterval(interval);
 }, [
   tournament.isRunning,
   tournament.timeLeft,
-  tournament.currentLevelIndex,
-  tournament.blinds,
-  tournament.levelDuration,
-  update,
 ]);
+
+  const currentLevel = tournament.blinds[tournament.currentLevelIndex];
+  const seconds = Math.max(0, tournament.timeLeft);
+  const time = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+
+  return (
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-6 p-8 text-center">
+      <h1 className="text-4xl font-bold">{tournament.name}</h1>
+      <div className="text-9xl font-mono font-bold text-green-400">{time}</div>
+      <h2 className="text-3xl">
+        {currentLevel?.isBreak ? 'Intervalo' : `Nível ${currentLevel?.level ?? 0}`}
+      </h2>
+      {currentLevel && !currentLevel.isBreak && (
+        <p className="text-4xl">
+          Blinds: {currentLevel.smallBlind} / {currentLevel.bigBlind}
+          {currentLevel.ante > 0 ? ` • Ante: ${currentLevel.ante}` : ''}
+        </p>
+      )}
+    </main>
+  );
+}
